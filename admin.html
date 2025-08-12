@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin - Presensi PPPK</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;padding:12px;background:#f4f6fb;color:#111}
+h1{margin:0 0 8px}
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{border:1px solid #ddd;padding:8px;text-align:center}
+.photo{width:80px;height:80px;object-fit:cover;border-radius:6px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+</style>
+</head>
+<body>
+<h1>Dashboard Admin - Presensi PPPK</h1>
+<div class="controls">
+  <input type="date" id="filterDate">
+  <button id="btnFilter">Terapkan</button>
+  <button id="btnRefresh">Refresh</button>
+  <button id="btnExport">Unduh CSV</button>
+</div>
+<table class="table" id="tbl">
+<thead><tr><th>No</th><th>Foto Masuk</th><th>Foto Pulang</th><th>Nama</th><th>NIP</th><th>Tanggal</th><th>Jam Masuk</th><th>Jam Pulang</th><th>Lokasi Masuk</th><th>Lokasi Pulang</th><th>Status</th></tr></thead>
+<tbody></tbody>
+</table>
+<script>
+async function fetchData(date=null){
+  let url = 'get_data.php';
+  if(date){
+    const parts = date.split('-');
+    const d = parts[2] + '/' + parts[1] + '/' + parts[0];
+    url += '?date=' + encodeURIComponent(d);
+  }
+  const res = await fetch(url);
+  const j = await res.json();
+  if(!j.ok){ alert('Gagal mengambil data'); return; }
+  const tb = document.querySelector('#tbl tbody');
+  tb.innerHTML = '';
+  j.data.forEach((r,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>'+(i+1)+'</td>' +
+      '<td>'+(r.foto_masuk? '<img src="uploads/'+r.foto_masuk+'" class="photo">' : '')+'</td>' +
+      '<td>'+(r.foto_pulang? '<img src="uploads/'+r.foto_pulang+'" class="photo">' : '')+'</td>' +
+      '<td>'+escapeHtml(r.nama)+'</td>' +
+      '<td>'+escapeHtml(r.nip)+'</td>' +
+      '<td>'+r.tanggal+'</td>' +
+      '<td>'+r.jam_masuk+'</td>' +
+      '<td>'+r.jam_pulang+'</td>' +
+      '<td>'+(r.lat_masuk? '<a target="_blank" href="https://www.google.com/maps?q='+r.lat_masuk+','+r.lon_masuk+'">Lihat</a>':'')+'</td>' +
+      '<td>'+(r.lat_pulang? '<a target="_blank" href="https://www.google.com/maps?q='+r.lat_pulang+','+r.lon_pulang+'">Lihat</a>':'')+'</td>' +
+      '<td>'+escapeHtml(r.status)+'</td>';
+    tb.appendChild(tr);
+  });
+}
+
+function escapeHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+document.getElementById('btnFilter').addEventListener('click', ()=>{
+  const d = document.getElementById('filterDate').value;
+  fetchData(d);
+});
+document.getElementById('btnRefresh').addEventListener('click', ()=> fetchData());
+document.getElementById('btnExport').addEventListener('click', ()=>{
+  const d = document.getElementById('filterDate').value;
+  let url = 'get_data.php';
+  if(d){ const parts=d.split('-'); const formatted = parts[2]+'/'+parts[1]+'/'+parts[0]; url += '?date=' + encodeURIComponent(formatted); }
+  fetch(url).then(r=>r.json()).then(j=>{
+    if(!j.ok){ alert('Gagal'); return; }
+    let csv = 'No,Nama,NIP,Tanggal,JamMasuk,JamPulang,Status,FotoMasukPath,FotoPulangPath,LatMasuk,LonMasuk,LatPulang,LonPulang\n';
+    j.data.forEach((r,i)=>{
+      csv += [i+1, '"'+r.nama.replace(/"/g,'""')+'"', '"'+r.nip+'"', r.tanggal, r.jam_masuk||'', r.jam_pulang||'', '"'+(r.status||'')+'"', '"uploads/'+(r.foto_masuk||'')+'"', '"uploads/'+(r.foto_pulang||'')+'"', r.lat_masuk||'', r.lon_masuk||'', r.lat_pulang||'', r.lon_pulang||''].join(',') + '\n';
+    });
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'presensi_export.csv'; document.body.appendChild(a); a.click(); a.remove();
+  });
+});
+
+// auto load today's data
+fetchData();
+setInterval(()=> fetchData(), 30*1000);
+</script>
+</body>
+</html>

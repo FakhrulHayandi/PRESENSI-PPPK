@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="id">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Presensi - Pegawai</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;padding:12px;background:#f4f6fb}
+.card{background:#fff;padding:12px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.06);max-width:800px;margin:auto}
+.photo{width:120px;height:120px;border-radius:8px;object-fit:cover;border:1px solid #ddd}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+</style></head><body>
+<div class="card">
+<h2>Presensi Pegawai</h2>
+<label>Nama</label><input id="nama" type="text" placeholder="Nama"><br>
+<label>NIP</label><input id="nip" type="text" placeholder="NIP"><br>
+<label>Status</label><select id="status"><option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpha</option></select>
+<div style="margin-top:8px;font-size:12px;color:#666">Saat absen, kamera & lokasi akan diminta.</div>
+<div class="controls">
+<button id="btnMasuk">Absen Masuk (Selfie)</button>
+<button id="btnPulang">Absen Pulang (Selfie)</button>
+<button id="btnPreview">Preview Kamera</button>
+</div>
+<div style="margin-top:12px">
+<video id="video" autoplay playsinline style="width:100%;max-height:320px;background:#000;border-radius:8px"></video>
+<canvas id="canvas" style="display:none"></canvas>
+<img id="photoPreview" class="photo" alt="Preview">
+</div>
+</div>
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const preview = document.getElementById('photoPreview');
+let stream = null;
+async function startCamera(){ try{ stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'user' } }, audio:false }); video.srcObject = stream; return true;}catch(e){ alert('Gagal mengakses kamera: ' + e.message); return false; } }
+function stopCamera(){ try{ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; video.srcObject=null; } }catch(e){} }
+function takeBlob(){ const w = video.videoWidth || 640; const h = video.videoHeight || 480; const size = 200; canvas.width = size; canvas.height = size; const ctx = canvas.getContext('2d'); const scale = Math.max(size/w, size/h); const sw = Math.round(size/scale); const sh = Math.round(size/scale); const sx = Math.round((w-sw)/2); const sy = Math.round((h-sh)/2); ctx.drawImage(video, sx, sy, sw, sh, 0, 0, size, size); return new Promise(resolve=> canvas.toBlob(blob=> resolve(blob), 'image/jpeg', 0.75)); }
+function getLocation(){ return new Promise(resolve=>{ if(!navigator.geolocation) return resolve({ok:false}); navigator.geolocation.getCurrentPosition(p=> resolve({ok:true,lat:p.coords.latitude,lon:p.coords.longitude}), e=> resolve({ok:false,msg:e.message}), {enableHighAccuracy:true,timeout:8000}); }); }
+
+async function submit(mode){ const nama = document.getElementById('nama').value.trim(); const nip = document.getElementById('nip').value.trim(); const status = document.getElementById('status').value; if(!nama||!nip){ alert('Nama & NIP wajib'); return; } const camOk = await startCamera(); await new Promise(r=>setTimeout(r,250)); const blob = stream ? await takeBlob() : null; if(blob) preview.src = URL.createObjectURL(blob); const loc = await getLocation(); const form = new FormData(); form.append('nama', nama); form.append('nip', nip); form.append('status', status); form.append('mode', mode); form.append('lat', loc.ok?loc.lat:''); form.append('lon', loc.ok?loc.lon:''); if(blob) form.append('photo', blob, 'selfie.jpg'); try{ const res = await fetch('upload.php', { method:'POST', body: form }); const j = await res.json(); if(j.ok){ alert('Berhasil: ' + (j.mode || '')); } else { alert('Gagal: ' + (j.error || 'unknown')); } }catch(e){ alert('Upload gagal: ' + e.message); } stopCamera(); }
+
+document.getElementById('btnMasuk').addEventListener('click', ()=> submit('masuk'));
+document.getElementById('btnPulang').addEventListener('click', ()=> submit('pulang'));
+document.getElementById('btnPreview').addEventListener('click', ()=> startCamera());
+</script></body></html>
